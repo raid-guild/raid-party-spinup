@@ -1,4 +1,17 @@
 [submodule "lib/forge-std"]
 	path = lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
-
+[submodule "lib/smart-invoice"]
+	path = lib/smart-invoice
+	url = https://github.com/raid-guild/smart-invoice
+[submodule "lib/hats-zodiac"]
+	path = lib/hats-zodiac
+	url = https://github.com/hats-protocol/hats-zodiac
+	branch = d4b878b
+[submodule "lib/hats-protocol"]
+	path = lib/hats-protocol
+	url = https://github.com/hats-protocol/hats-protocol
+[submodule "lib/solady"]
+	path = lib/solady
+	url = https://github.com/Vectorized/solady
+	branch = v0.0.78
