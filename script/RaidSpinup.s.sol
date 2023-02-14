@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.16;
 
-import "forge-std/Script.sol";
+import { Script } from "forge-std/Script.sol";
 
-contract CounterScript is Script {
-    function setUp() public {}
+contract DeployRaidSpinup is Script {
+    function setUp() public { }
 
     function run() public {
         uint256 privKey = vm.envUint("PRIVATE_KEY");
@@ -15,4 +15,4 @@ contract CounterScript is Script {
     }
 }
 
-// forge script script/CounterScript.s.sol -f ethereum --broadcast --verify
+// forge script script/RaidPartySpinupScript.s.sol -f ethereum --broadcast --verify
