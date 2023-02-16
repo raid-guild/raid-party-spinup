@@ -21,10 +21,9 @@ enum Roles {
 
 struct RaidData {
     uint16 roles;
-    // TODO track uint16 hat ids for each role
-    address raidPartyAvatar;
-    // address signerGate // can retrieve from safe storage
-    address invoice;
+    address raidPartyAvatar; // ie a Safe
+    // address signerGate // can retrieve from Safe storage
+    address wrappedInvoice; // can retrieve invoice address from wrappedInvoice
     bool active;
 }
 

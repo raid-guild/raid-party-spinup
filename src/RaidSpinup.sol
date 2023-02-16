@@ -3,7 +3,7 @@ pragma solidity ^0.8.16;
 
 import { IHats } from "hats-protocol/interfaces/IHats.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
-import { ISmartInvoiceFactory } from "smart-invoice/interfaces/ISmartInvoiceFactory.sol";
+import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import { LibRaidRoles, Roles, RaidData, NotCleric, NotRaidParty, MissingCleric } from "./LibRaidSpinup.sol";
 
@@ -16,7 +16,7 @@ contract RaidSpinup {
     // Raid Guild's DAO contract or minion
     address public immutable DAO; // TODO should this be immutable?
     HatsSignerGateFactory public HSG_FACTORY;
-    ISmartInvoiceFactory public INVOICE_FACTORY;
+    IWrappedInvoiceFactory public WRAPPED_INVOICE_FACTORY;
     address public INVOICE_ARBITRATOR;
     address public COMMITMENT;
 
@@ -37,7 +37,7 @@ contract RaidSpinup {
         address _dao,
         address _hats,
         address _hsgFactory,
-        address _smartInvoiceFactory,
+        address _wrappedInvoiceFactory,
         address _commitmentStaking,
         address _invoiceArbitrator,
         uint256 _raidManagerHat,
@@ -48,7 +48,7 @@ contract RaidSpinup {
         DAO = _dao;
         HATS = IHats(_hats);
         HSG_FACTORY = HatsSignerGateFactory(_hsgFactory);
-        INVOICE_FACTORY = ISmartInvoiceFactory(_smartInvoiceFactory);
+        WRAPPED_INVOICE_FACTORY = IWrappedInvoiceFactory(_wrappedInvoiceFactory);
         COMMITMENT = _commitmentStaking;
         INVOICE_ARBITRATOR = _invoiceArbitrator;
         raidManagerHat = _raidManagerHat;
@@ -118,30 +118,19 @@ contract RaidSpinup {
         // 5. Mint Raid hat to Safe
         HATS.mintHat(raidId, safe);
 
-        // 6. Deploy Smart Invoice, with Safe as provider (and RG DAO as spoils recipient?)
-        address invoice = INVOICE_FACTORY.createDeterministic({
-            _client: _client,
-            _provider: safe,
-            _resolverType: 2, // ARBITRATOR
-            _resolver: INVOICE_ARBITRATOR,
-            _token: _invoiceToken,
-            _amounts: _invoiceAmounts,
-            _terminationTime: _invoiceTerminationTime,
-            _details: _invoiceDetails,
-            _salt: bytes32(raidId),
-            _requireVerification: false
-        });
+        // 6. Deploy Wrapped Invoice, with Safe as provider (and RG DAO as spoils recipient?)
+        address wrappedInvoice = _deployWrappedInvoice(_client, safe, _invoiceToken, _invoiceAmounts, _invoiceTerminationTime, _invoiceDetails);
 
         // initialize raid and store it as active
         RaidData memory raid;
         raid.active = true;
         raid.roles = _roles;
         raids[raidId] = raid;
-        raid.invoice = invoice;
+        raid.wrappedInvoice = wrappedInvoice;
         raid.raidPartyAvatar = safe;
 
         // emit RaidCreated event
-        emit RaidCreated(raidId, safe, invoice);
+        emit RaidCreated(raidId, safe, wrappedInvoice);
     }
 
     function _createRaidRoles(uint256 _raidId, string memory _raidDetails, uint16 _roles, address[] calldata _raiders)
@@ -190,6 +179,31 @@ contract RaidSpinup {
                 ++i;
             }
         }
+    }
+
+    function _deployWrappedInvoice(
+        address _client,
+        address _safe,
+        address _invoiceToken,
+        uint256[] calldata _invoiceAmounts,
+        uint256 _invoiceTerminationTime,
+        bytes32 _invoiceDetails
+    ) internal returns (address wrappedInvoice) {
+        address[] memory providers = new address[](2);
+        providers[0] = DAO;
+        providers[1] = _safe;
+
+        wrappedInvoice = WRAPPED_INVOICE_FACTORY.create({
+            _client: _client,
+            _providers: providers,
+            _splitFactor: 10, // 10% to DAO and 90% to raid party
+            _resolverType: 2, // ARBITRATOR
+            _resolver: INVOICE_ARBITRATOR,
+            _token: _invoiceToken,
+            _amounts: _invoiceAmounts,
+            _terminationTime: _invoiceTerminationTime,
+            _details: _invoiceDetails
+        });
     }
 
     function createRIP() public {

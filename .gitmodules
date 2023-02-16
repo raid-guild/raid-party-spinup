@@ -1,9 +1,6 @@
 [submodule "lib/forge-std"]
 	path = lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
-[submodule "lib/smart-invoice"]
-	path = lib/smart-invoice
-	url = https://github.com/raid-guild/smart-invoice
 [submodule "lib/hats-zodiac"]
 	path = lib/hats-zodiac
 	url = https://github.com/hats-protocol/hats-zodiac
@@ -18,3 +15,6 @@
 [submodule "lib/hats-auth"]
 	path = lib/hats-auth
 	url = https://github.com/Hats-Protocol/hats-auth
+[submodule "lib/smart-escrow"]
+	path = lib/smart-escrow
+	url = https://github.com/raid-guild/smart-escrow
