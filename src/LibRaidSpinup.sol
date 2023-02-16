@@ -21,16 +21,18 @@ enum Roles {
 }
 
 struct RaidData {
-    uint16 roles;
+    uint16 roles; // bitmap of roles
     address raidPartyAvatar; // ie a Safe
     // address signerGate // can retrieve from Safe storage
     address wrappedInvoice; // can retrieve invoice address from wrappedInvoice
     bool active;
 }
 
+error InvalidArrayLength();
 error NotCleric();
 error NotRaidParty();
 error MissingCleric();
+error InvalidRole();
 
 library LibRaidRoles {
     function mask(Roles _role) internal pure returns (uint16 _mask) {
@@ -41,7 +43,12 @@ library LibRaidRoles {
         hasRole = _roles & mask(_role) != 0;
     }
 
+    function addTo(Roles _role, uint256 _roles) internal pure returns (uint256 _newRoles) {
+        _newRoles = _roles | mask(_role);
+    }
+
     function key(Roles _role) internal pure returns (string memory) {
+        // if (_role == Roles.Client) return "Client";
         if (_role == Roles.Cleric) return "Cleric";
         if (_role == Roles.Monk) return "Monk";
         if (_role == Roles.Warrior) return "Warrior";
@@ -57,5 +64,6 @@ library LibRaidRoles {
         if (_role == Roles.Druid) return "Druid";
         if (_role == Roles.AngryDwarf) return "Angry Dwarf";
         if (_role == Roles.Rogue) return "Rogue";
+        else revert InvalidRole();
     }
 }
