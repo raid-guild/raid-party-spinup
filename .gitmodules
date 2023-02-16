@@ -15,3 +15,6 @@
 	path = lib/solady
 	url = https://github.com/Vectorized/solady
 	branch = v0.0.78
+[submodule "lib/hats-auth"]
+	path = lib/hats-auth
+	url = https://github.com/Hats-Protocol/hats-auth
