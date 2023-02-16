@@ -11,6 +11,7 @@ remappings = [
   "forge-std/=lib/forge-std/src/",
   "hats-protocol/=lib/hats-protocol/src",
   "hats-zodiac/=lib/hats-zodiac/src/",
+  "hats-auth/=lib/hats-auth/src/",
   "smart-escrow/=lib/smart-escrow/packages/contracts/contracts/",
   "solady/=lib/solady/src"
 ]

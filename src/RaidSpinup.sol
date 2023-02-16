@@ -5,12 +5,21 @@ import { IHats } from "hats-protocol/interfaces/IHats.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
 import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
 import { LibString } from "solady/utils/LibString.sol";
+import { HatsOwned } from "hats-auth/HatsOwned.sol";
 import { LibRaidRoles, Roles, RaidData, NotCleric, NotRaidParty, MissingCleric } from "./LibRaidSpinup.sol";
 
-contract RaidSpinup {
+contract RaidSpinup is HatsOwned {
     using LibRaidRoles for Roles;
 
     event RaidCreated(uint256 raidId, address raidPartyAvatar, address raidInvoice);
+    event HatsSignerGateFactorySet(address factory);
+    event WrappedInvoiceFactorySet(address factory);
+    event InvoiceArbitratorSet(address arbitrator);
+    event CommitmentContractSet(address commitment);
+    event RaidManagerHatSet(uint256 hatId);
+    event GuildClericHatSet(uint256 hatId);
+    event RaidImageUriSet(string image);
+    event RoleImageUriSet(Roles role, string imageUri);
 
     IHats public immutable HATS;
     // Raid Guild's DAO contract or minion
@@ -40,11 +49,12 @@ contract RaidSpinup {
         address _wrappedInvoiceFactory,
         address _commitmentStaking,
         address _invoiceArbitrator,
+        uint256 _ownerHat,
         uint256 _raidManagerHat,
         uint256 _clericHat,
         string memory _raidImageURI,
         string[] memory _roleImageURIs
-    ) payable {
+    ) payable HatsOwned(_ownerHat, _hats) {
         DAO = _dao;
         HATS = IHats(_hats);
         HSG_FACTORY = HatsSignerGateFactory(_hsgFactory);
@@ -133,6 +143,47 @@ contract RaidSpinup {
         emit RaidCreated(raidId, safe, wrappedInvoice);
     }
 
+    // ONLY_OWNER FUNCTIONS
+
+    function setHatsSignerGateFactory(address _hsgFactory) public onlyOwner {
+        HSG_FACTORY = HatsSignerGateFactory(_hsgFactory);
+        emit HatsSignerGateFactorySet(_hsgFactory);
+    }
+
+    function setWrappedInvoiceFactory(address _wrappedInvoiceFactory) public onlyOwner {
+        WRAPPED_INVOICE_FACTORY = IWrappedInvoiceFactory(_wrappedInvoiceFactory);
+        emit WrappedInvoiceFactorySet(_wrappedInvoiceFactory);
+    }
+
+    function setInvoiceArbitrator(address _invoiceArbitrator) public onlyOwner {
+        INVOICE_ARBITRATOR = _invoiceArbitrator;
+        emit InvoiceArbitratorSet(_invoiceArbitrator);
+    }
+
+    function setCommitmentContract(address _commitmentContract) public onlyOwner {
+        COMMITMENT = _commitmentContract;
+        emit CommitmentContractSet(_commitmentContract);
+    }
+
+    function setRaidManagerHat(uint256 _raidManagerHat) public onlyOwner {
+        raidManagerHat = _raidManagerHat;
+        emit RaidManagerHatSet(_raidManagerHat);
+    }
+
+    function setGuildClericHat(uint256 _guildClericHat) public onlyOwner {
+        guildClericHat = _guildClericHat;
+        emit GuildClericHatSet(_guildClericHat);
+    }
+
+    function setRaidImageUri(string calldata _imageUri) public onlyOwner {
+        raidImageUri = _imageUri;
+        emit RaidImageUriSet(_imageUri);
+    }
+
+    function setRoleImageUri(Roles _role, string calldata _imageUri) public onlyOwner {
+        roleImageUris[_role] = _imageUri;
+        emit RoleImageUriSet(_role, _imageUri);
+    }
     function _createRaidRoles(uint256 _raidId, string memory _raidDetails, uint16 _roles, address[] calldata _raiders)
         // uint256[] memory _signerHats
         public
