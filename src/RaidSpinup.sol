@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import { IHats } from "hats-protocol/interfaces/IHats.sol";
+import { HatsOwned } from "hats-auth/HatsOwned.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
 import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
 import { LibString } from "solady/utils/LibString.sol";
-import { HatsOwned } from "hats-auth/HatsOwned.sol";
 import { LibRaidRoles, Roles, RaidData, NotCleric, NotRaidParty, MissingCleric } from "./LibRaidSpinup.sol";
 
 contract RaidSpinup is HatsOwned {
     using LibRaidRoles for Roles;
+
+    // EVENTS
 
     event RaidCreated(uint256 raidId, address raidPartyAvatar, address raidInvoice);
     event HatsSignerGateFactorySet(address factory);
@@ -21,26 +22,31 @@ contract RaidSpinup is HatsOwned {
     event RaidImageUriSet(string image);
     event RoleImageUriSet(Roles role, string imageUri);
 
-    IHats public immutable HATS;
+    // STORAGE
+
     // Raid Guild's DAO contract or minion
-    address public immutable DAO; // TODO should this be immutable?
+    address public immutable DAO;
+
     HatsSignerGateFactory public HSG_FACTORY;
     IWrappedInvoiceFactory public WRAPPED_INVOICE_FACTORY;
     address public INVOICE_ARBITRATOR;
     address public COMMITMENT;
-
-    string public IMAGE_RAID;
+    string public raidImageUri;
     // standard images for each role
-    mapping(Roles => string) public roleImages;
+    mapping(Roles => string) public roleImageUris;
 
     uint256 public raidManagerHat;
     uint256 public guildClericHat;
 
-    string internal constant RAID_DETAILS_PRE = "Raid ";
-
     // sets a raid's id as its raid hat id
     // the alternative would be to store raids in an array and use a simple counter for the raid id
     mapping(uint256 => RaidData) public raids;
+
+    // CONSTANTS
+
+    string internal constant RAID_DETAILS_PRE = "Raid ";
+
+    // CONSTRUCTOR
 
     constructor(
         address _dao,
@@ -52,23 +58,22 @@ contract RaidSpinup is HatsOwned {
         uint256 _ownerHat,
         uint256 _raidManagerHat,
         uint256 _clericHat,
-        string memory _raidImageURI,
-        string[] memory _roleImageURIs
+        string memory _raidImageUri,
+        string[] memory _roleImageUris
     ) payable HatsOwned(_ownerHat, _hats) {
         DAO = _dao;
-        HATS = IHats(_hats);
         HSG_FACTORY = HatsSignerGateFactory(_hsgFactory);
         WRAPPED_INVOICE_FACTORY = IWrappedInvoiceFactory(_wrappedInvoiceFactory);
         COMMITMENT = _commitmentStaking;
         INVOICE_ARBITRATOR = _invoiceArbitrator;
         raidManagerHat = _raidManagerHat;
         guildClericHat = _clericHat;
-        IMAGE_RAID = _raidImageURI;
+        raidImageUri = _raidImageUri;
 
         // assign role images to roleImages
-        // TODO ensure that _roleImageURIs.length == Roles enum length
-        for (uint256 i; i < _roleImageURIs.length;) {
-            roleImages[Roles(i)] = _roleImageURIs[i];
+        // TODO ensure that _roleImageUris.length == Roles enum length
+        for (uint256 i; i < _roleImageUris.length;) {
+            roleImageUris[Roles(i)] = _roleImageUris[i];
             unchecked {
                 ++i;
             }
@@ -81,6 +86,31 @@ contract RaidSpinup is HatsOwned {
         // we add 1 to the role enum value to account for the raid hat (ie the admin)
         roleHat = HATS.buildHatId(_raidId, uint16(_role) + 1);
     }
+
+    // ONLY_CLERIC FUNCTIONS
+
+    /**
+     * @notice Spins up a new raid with the following components:
+     *     - A Hat worn by and representing the raid party
+     *     - Hats for all possible raid roles
+     *     - A Safe multisig for the raid party, with signers gated by the role Hats
+     *     - A Wrapped Invoice for the raid
+     *
+     * Supports assignment of up to one raider per role. If there are multiple raiders per role, the raid party can mint the relevant role hat to the
+     * additinal raiders once the raid has been created
+     *
+     * @param _roles a bitmask of roles to be created for the raid
+     *
+     * @param _raiders an array of addresses to be assigned to the raid roles. The mapping of address to role is determined by the order of the array,
+     * which must match order the Roles enum. If a given role is unspecified or not yet filled, the address at that index must be set to address(0).
+     *
+     * @param _client the address of the raid client
+     * @param _invoiceToken the token to be used for the invoice
+     * @param _invoiceAmounts an array milestone amounts for the invoice
+     * @param _invoiceTerminationTime the exact invoice termination time at seconds since epoch
+     * @param _invoiceDetails bytes-encoded details of the invoice
+     * @return raidId the id of the newly created raid
+     */
     function createRaid(
         uint16 _roles,
         address[] calldata _raiders,
@@ -105,10 +135,11 @@ contract RaidSpinup is HatsOwned {
             _eligibility: DAO,
             _toggle: DAO,
             _mutable: true,
-            _imageURI: IMAGE_RAID
+            _imageURI: raidImageUri
         });
 
-        // 2. Create all specified raid role hats. For empty roles, create a mutable hat with all properties set to default values. This way, the same role will have the same child hat id across all raids
+        /* 2. Create raid role hats and mint as appropriate to the `_raiders`. For empty roles, create a mutable hat with all properties set to default values. 
+        This way, the same role will have the same child hat id across all raids */
         uint256[] memory signerHats = new uint256[](uint256(type(Roles).max));
         signerHats = _createRaidRoles(raidId, raidDetails, _roles, _raiders);
 
@@ -122,11 +153,13 @@ contract RaidSpinup is HatsOwned {
             _saltNonce: raidId // for funsies
         });
 
-        // 5. Mint Raid hat to Safe
+        // 4. Mint Raid hat to Safe
         HATS.mintHat(raidId, safe);
 
-        // 6. Deploy Wrapped Invoice, with Safe as provider (and RG DAO as spoils recipient?)
-        address wrappedInvoice = _deployWrappedInvoice(_client, safe, _invoiceToken, _invoiceAmounts, _invoiceTerminationTime, _invoiceDetails);
+        // 5. Deploy Wrapped Invoice, with Safe as provider (and RG DAO as spoils recipient?)
+        address wrappedInvoice = _deployWrappedInvoice(
+            _client, safe, _invoiceToken, _invoiceAmounts, _invoiceTerminationTime, _invoiceDetails
+        );
 
         // initialize raid and store it as active
         RaidData memory raid;
@@ -140,12 +173,19 @@ contract RaidSpinup is HatsOwned {
         emit RaidCreated(raidId, safe, wrappedInvoice);
     }
 
+    // ONLY_RAID_PARTY FUNCTIONS
+
     function mintRoleToRaider(Roles _role, uint256 _raidId, address _raider) public onlyRaidParty(_raidId) {
         // derive role hat id from raid id and role
         uint256 roleHat = getRaidRoleHat(_raidId, _role);
         // mint role hat to raider
         HATS.mintHat(roleHat, _raider);
     }
+
+    function closeRaid(uint256 _raidId) public onlyRaidParty(_raidId) {
+        raids[_raidId].active = false;
+    }
+
     // ONLY_OWNER FUNCTIONS
 
     function setHatsSignerGateFactory(address _hsgFactory) public onlyOwner {
@@ -187,6 +227,13 @@ contract RaidSpinup is HatsOwned {
         roleImageUris[_role] = _imageUri;
         emit RoleImageUriSet(_role, _imageUri);
     }
+
+    // INTERNAL FUNCTIONS
+
+    function _checkValidCleric(address _account) internal view {
+        if (!HATS.isWearerOfHat(_account, guildClericHat)) revert NotCleric();
+    }
+
     function _createRaidRoles(uint256 _raidId, string memory _raidDetails, uint16 _roles, address[] calldata _raiders)
         // uint256[] memory _signerHats
         public
@@ -206,11 +253,11 @@ contract RaidSpinup is HatsOwned {
                     _eligibility: COMMITMENT,
                     _toggle: COMMITMENT,
                     _mutable: true,
-                    _imageURI: roleImages[role]
+                    _imageURI: roleImageUris[role]
                 });
 
                 // if filled, mint the hat to the specified raider
-                // FIXME what if there are multiple raiders with the same role?
+                //
                 if (_raiders[i] != address(0)) {
                     HATS.mintHat(roleHat, _raiders[i]);
                 }
@@ -258,28 +305,6 @@ contract RaidSpinup is HatsOwned {
             _terminationTime: _invoiceTerminationTime,
             _details: _invoiceDetails
         });
-    }
-
-    function createRIP() public {
-        // TODO
-    }
-
-    function addRoleToRaid(Roles _role, uint256 _raidId) public onlyRaidParty(_raidId) {
-        // 1. create new hat for role (admin is the Raid hat)
-        // TODO
-    }
-
-    function closeRaid(uint256 _raidId) public onlyRaidParty(_raidId) {
-        raids[_raidId].active = false;
-    }
-
-    // TODO add onlyOwner functions for updating the parameters set in the constructor
-
-    // INTERNAL FUNCTIONS
-
-    function _checkValidCleric(address _account) internal view returns (bool isCleric) {
-        if (!HATS.isWearerOfHat(_account, guildClericHat)) revert NotCleric();
-        isCleric = true;
     }
 
     // MODIFIERS

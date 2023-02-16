@@ -2,21 +2,22 @@
 pragma solidity ^0.8.16;
 
 enum Roles {
-    Cleric,
-    Monk,
-    Warrior,
-    Wizard,
-    Archer,
-    Scribe,
-    Hunter,
-    Ranger,
-    Bard,
-    Paladin,
-    Alchemist,
-    Necromancer,
-    Druid,
-    AngryDwarf,
-    Rogue
+    Client, // 0
+    Cleric, // 1
+    Monk, // 2
+    Warrior, // 3
+    Wizard, // 4
+    Archer, // 5
+    Scribe, // 6
+    Hunter, // 7
+    Ranger, // 8
+    Bard, // 9
+    Paladin, // 10
+    Alchemist, // 11
+    Necromancer, // 12
+    Druid, // 13
+    AngryDwarf, // 14
+    Rogue // 15
 }
 
 struct RaidData {
