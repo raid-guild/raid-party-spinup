@@ -75,15 +75,12 @@ contract RaidSpinup is HatsOwned {
         }
     }
 
-    /// @notice Creates a new raid with the specified roles and raiders
-    /// @param _roles a bitmask of roles to be created for the raid
-    /// @param _raiders an array of addresses to be assigned to the raid roles. The mapping of address to role is determined by the order of the array, which must match order the Roles enum. If a given role is unspecified or not yet filled, the address at that index must be set to address(0).
-    /// @param _client the address of the raid client
-    /// @param _invoiceToken the token to be used for the invoice
-    /// @param _invoiceAmounts an array milestone amounts for the invoice
-    /// @param _invoiceTerminationTime the exact invoice termination time at seconds since epoch
-    /// @param _invoiceDetails bytes-encoded details of the invoice
-    /// @return raidId the id of the newly created raid
+    // PUBLIC FUNCTIONS
+
+    function getRaidRoleHat(uint256 _raidId, Roles _role) public view returns (uint256 roleHat) {
+        // we add 1 to the role enum value to account for the raid hat (ie the admin)
+        roleHat = HATS.buildHatId(_raidId, uint16(_role) + 1);
+    }
     function createRaid(
         uint16 _roles,
         address[] calldata _raiders,
@@ -143,6 +140,12 @@ contract RaidSpinup is HatsOwned {
         emit RaidCreated(raidId, safe, wrappedInvoice);
     }
 
+    function mintRoleToRaider(Roles _role, uint256 _raidId, address _raider) public onlyRaidParty(_raidId) {
+        // derive role hat id from raid id and role
+        uint256 roleHat = getRaidRoleHat(_raidId, _role);
+        // mint role hat to raider
+        HATS.mintHat(roleHat, _raider);
+    }
     // ONLY_OWNER FUNCTIONS
 
     function setHatsSignerGateFactory(address _hsgFactory) public onlyOwner {
@@ -288,7 +291,7 @@ contract RaidSpinup is HatsOwned {
     }
 
     modifier onlyRaidParty(uint256 _raidId) {
-        uint256 clericHat = HATS.buildHatId(_raidId, 1);
+        uint256 clericHat = getRaidRoleHat(_raidId, Roles.Cleric);
         // revert if msg.sender is not wearing the raid cleric or raid party hat
         if (!HATS.isWearerOfHat(msg.sender, _raidId) && !HATS.isWearerOfHat(msg.sender, clericHat)) {
             revert NotRaidParty();
