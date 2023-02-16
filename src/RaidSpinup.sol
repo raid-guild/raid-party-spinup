@@ -138,10 +138,16 @@ contract RaidSpinup is HatsOwned {
             _imageURI: raidImageUri
         });
 
-        /* 2. Create raid role hats and mint as appropriate to the `_raiders`. For empty roles, create a mutable hat with all properties set to default values. 
-        This way, the same role will have the same child hat id across all raids */
-        uint256[] memory signerHats = new uint256[](uint256(type(Roles).max));
-        signerHats = _createRaidRoles(raidId, raidDetails, _roles, _raiders);
+        // 2. Create the client hat, but DON'T mint it and DON'T add it to MultiHatsSignerGate
+        HATS.createHat({
+            _admin: raidManagerHat,
+            _details: string.concat(raidHatDetails, " Client"),
+            _maxSupply: 3, // TODO how many client reps should we allow?
+            _eligibility: DAO,
+            _toggle: DAO,
+            _mutable: true,
+            _imageURI: roleImageUris[Roles.Client]
+        });
 
         // 3. Deploy MultiHatsSignerGate and Safe, with Raid Manager Hat as owner and raid role hats (from 2 and 3) as signer hats
         (address safe, /* address mhsg*/ ) = HSG_FACTORY.deployMultiHatsSignerGateAndSafe({
@@ -182,7 +188,12 @@ contract RaidSpinup is HatsOwned {
         HATS.mintHat(roleHat, _raider);
     }
 
-    function closeRaid(uint256 _raidId) public onlyRaidParty(_raidId) {
+    function mintRaidClientHat(uint256 _raidId, address _client) public onlyRaidParty(_raidId) {
+        // derive role hat id from raid id and role
+        uint256 clientHat = getRaidRoleHat(_raidId, Roles.Client);
+        // mint role hat to client
+        HATS.mintHat(clientHat, _client);
+    }
         raids[_raidId].active = false;
     }
 
