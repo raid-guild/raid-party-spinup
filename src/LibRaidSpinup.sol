@@ -48,7 +48,7 @@ library LibRaidRoles {
     }
 
     function key(Roles _role) internal pure returns (string memory) {
-        // if (_role == Roles.Client) return "Client";
+        if (_role == Roles.Client) return "Client";
         if (_role == Roles.Cleric) return "Cleric";
         if (_role == Roles.Monk) return "Monk";
         if (_role == Roles.Warrior) return "Warrior";

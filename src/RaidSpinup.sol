@@ -129,7 +129,7 @@ contract RaidSpinup is HatsOwned {
      * @param _roles a bitmap of roles to be created for the raid
      *
      * @param _raiders an array of addresses to be assigned to the raid roles. The mapping of address to role is determined by the order of the array,
-     * which must match order the Roles enum. If a given role is unspecified or not yet filled, the address at that index must be set to address(0).
+     * which must match order the Roles enum, excluding Roles.Client. If a given role is unspecified or not yet filled, the address at that index must be set to address(0).
      *
      * @param _client the address of the raid client
      * @param _invoiceToken the token to be used for the invoice
@@ -165,10 +165,10 @@ contract RaidSpinup is HatsOwned {
             _imageURI: raidImageUri
         });
 
-        // 2. Create the client hat, but DON'T mint it and DON'T add it to MultiHatsSignerGate
+        // 2A. Create the client hat, but DON'T mint it and DON'T add it to MultiHatsSignerGate
         HATS.createHat({
             _admin: raidManagerHat,
-            _details: string.concat(raidHatDetails, " Client"),
+            _details: _generateRoleHatDetails(Roles.Client, raidHatDetails),
             _maxSupply: 3, // TODO how many client reps should we allow?
             _eligibility: DAO,
             _toggle: DAO,
@@ -176,7 +176,19 @@ contract RaidSpinup is HatsOwned {
             _imageURI: roleImageUris[Roles.Client]
         });
 
-        /* 3. Create raid role hats and mint as appropriate to the `_raiders`. 
+        // 2B Create the cleric hat and mint it to the cleric
+        uint256 clericHat = HATS.createHat({
+            _admin: raidManagerHat,
+            _details: _generateRoleHatDetails(Roles.Cleric, raidHatDetails),
+            _maxSupply: 1, // TODO is this the right max number if clerics?
+            _eligibility: DAO,
+            _toggle: DAO,
+            _mutable: true,
+            _imageURI: roleImageUris[Roles.Cleric]
+        });
+        HATS.mintHat(clericHat, _raiders[0]); // _raiders[0] is the cleric, ie `uint256(Roles.Cleric) - 1`
+
+        /* 3. Create non-client and non-cleric raid role hats and mint as appropriate to the `_raiders`
         For empty roles, create a mutable hat with all properties set to default values. This way, the same role will have the same child hat id across all raids. 
         Also adds raid role hats to the MultiHatsSignerGate */
         uint256[] memory signerHats = new uint256[](MAX_ROLE_INDEX);
@@ -336,7 +348,7 @@ contract RaidSpinup is HatsOwned {
         uint256 roleHat;
         Roles role;
 
-        // start the loop at 1 to skip the Client role
+        // start the loop at 2 to skip the Client and Cleric roles, which were already created
         for (uint256 i = 1; i < MAX_ROLE_INDEX + 1;) {
             role = Roles(i);
             // Create a hat for each specified role
