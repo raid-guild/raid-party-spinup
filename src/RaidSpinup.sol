@@ -3,6 +3,7 @@ pragma solidity ^0.8.16;
 
 import { HatsOwned } from "hats-auth/HatsOwned.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
+import { MultiHatsSignerGate } from "hats-zodiac/MultiHatsSignerGate.sol";
 import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
 import { WrappedInvoice } from "smart-escrow/WrappedInvoice.sol";
 import { LibString } from "solady/utils/LibString.sol";
@@ -14,7 +15,8 @@ import {
     NotCleric,
     NotRaidParty,
     MissingCleric,
-    InvalidRole
+    InvalidRole,
+    ClosedRaid
 } from "./LibRaidSpinup.sol";
 import { Test, console2 } from "forge-std/Test.sol"; // remove after testing
 
@@ -248,23 +250,34 @@ contract RaidSpinup is HatsOwned {
     // ============================================================
 
     function addRoleToRaid(uint256 _raidId, Roles _role) public onlyRaidParty(_raidId) validRole(_role) {
+        RaidData storage raid = _checkActiveRaid(_raidId);
         uint256 roleHat = getRaidRoleHat(_raidId, _role);
 
         // update role hat with appropriate properties
         _updateRoleHat(roleHat, _raidId, _role);
 
         // add _role to the raid's roles bitmap
-        _role.addTo(raids[_raidId].roles);
+        _role.addTo(raid.roles);
     }
 
-    function mintRoleToRaider(Roles _role, uint256 _raidId, address _raider) public onlyRaidParty(_raidId) {
+    function mintRoleToRaider(Roles _role, uint256 _raidId, address _raider)
+        public
+        onlyRaidParty(_raidId)
+        validRole(_role)
+    {
+        _checkActiveRaid(_raidId);
         // derive role hat id from raid id and role
         uint256 roleHat = getRaidRoleHat(_raidId, _role);
         // mint role hat to raider
         HATS.mintHat(roleHat, _raider);
     }
 
-    function addAndMintRaidRole(Roles _role, uint256 _raidId, address _raider) public onlyRaidParty(_raidId) {
+    function addAndMintRaidRole(Roles _role, uint256 _raidId, address _raider)
+        public
+        onlyRaidParty(_raidId)
+        validRole(_role)
+    {
+        _checkActiveRaid(_raidId);
         uint256 roleHat = getRaidRoleHat(_raidId, _role);
 
         // update role hat with appropriate properties
@@ -275,6 +288,7 @@ contract RaidSpinup is HatsOwned {
     }
 
     function mintRaidClientHat(uint256 _raidId, address _client) public onlyRaidParty(_raidId) {
+        _checkActiveRaid(_raidId);
         // derive role hat id from raid id and role
         uint256 clientHat = getRaidRoleHat(_raidId, Roles.Client);
         // mint role hat to client
@@ -282,7 +296,9 @@ contract RaidSpinup is HatsOwned {
     }
 
     function closeRaid(uint256 _raidId, string calldata _comments) public onlyRaidParty(_raidId) {
-        raids[_raidId].active = false;
+        RaidData storage raid = _checkActiveRaid(_raidId);
+
+        raid.active = false;
 
         emit RaidClosed(_raidId, _comments);
     }
@@ -331,10 +347,14 @@ contract RaidSpinup is HatsOwned {
         emit RoleImageUriSet(_role, _imageUri);
     }
 
-    function setMinThresholdOnRaidSafe(uint256 _raidId, uint256 _minThreshold) public onlyOwner { }
+    function setMinThresholdOnRaidSafe(uint256 _raidId, uint256 _minThreshold) public onlyOwner {
+        RaidData storage raid = _checkActiveRaid(_raidId);
+        MultiHatsSignerGate(raid.signerGate).setMinThreshold(_minThreshold);
+    }
 
     function setMaxThresholdOnRaidSafe(uint256 _raidId, uint256 _maxThreshold) public onlyOwner {
-        // TODO
+        RaidData storage raid = _checkActiveRaid(_raidId);
+        MultiHatsSignerGate(raid.signerGate).setTargetThreshold(_maxThreshold);
     }
 
     // ============================================================
@@ -451,6 +471,11 @@ contract RaidSpinup is HatsOwned {
         raid.signerGate = _signerGate;
     }
 
+    function _checkActiveRaid(uint256 _raidId) internal view returns (RaidData storage raid) {
+        raid = raids[_raidId];
+        if (!raid.active) revert ClosedRaid();
+    }
+
     // ============================================================
     // MODIFIERS
     // ============================================================
@@ -472,6 +497,11 @@ contract RaidSpinup is HatsOwned {
 
     modifier validRole(Roles _role) {
         if (uint256(_role) > MAX_ROLE_INDEX) revert InvalidRole();
+        _;
+    }
+
+    modifier activeRaid(uint256 _raidId) {
+        if (!raids[_raidId].active) revert ClosedRaid();
         _;
     }
 }

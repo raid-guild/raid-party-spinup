@@ -33,6 +33,7 @@ error NotCleric();
 error NotRaidParty();
 error MissingCleric();
 error InvalidRole();
+error ClosedRaid();
 
 library LibRaidRoles {
     function mask(Roles _role) internal pure returns (uint16 _mask) {
