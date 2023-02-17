@@ -4,6 +4,7 @@ pragma solidity ^0.8.16;
 import { HatsOwned } from "hats-auth/HatsOwned.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
 import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
+import { WrappedInvoice } from "smart-escrow/WrappedInvoice.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import {
     LibRaidRoles,
@@ -24,7 +25,7 @@ contract RaidSpinup is HatsOwned {
     // EVENTS
     // ============================================================
 
-    event RaidCreated(uint256 raidId, address raidPartyAvatar, address raidInvoice);
+    event RaidCreated(uint256 raidId, address avatar, address signerGate, address wrappedInvoice);
     event HatsSignerGateFactorySet(address factory);
     event WrappedInvoiceFactorySet(address factory);
     event InvoiceArbitratorSet(address arbitrator);
@@ -111,6 +112,26 @@ contract RaidSpinup is HatsOwned {
         roleHat = HATS.buildHatId(_raidId, uint16(_role) + 1);
     }
 
+    function getRaidPartyAvatar(uint256 _raidId) public view returns (address avatar) {
+        avatar = raids[_raidId].avatar;
+    }
+
+    function getRaidPartySignerGate(uint256 _raidId) public view returns (address signerGate) {
+        signerGate = raids[_raidId].signerGate;
+    }
+
+    function getRaidWrappedInvoice(uint256 _raidId) public view returns (address wrappedInvoice) {
+        wrappedInvoice = raids[_raidId].wrappedInvoice;
+    }
+
+    function getRaidSmartInvoice(uint256 _raidId) public view returns (address invoice) {
+        invoice = address(WrappedInvoice(getRaidWrappedInvoice(_raidId)).invoice());
+    }
+
+    function getRaidStatus(uint256 _raidId) public view returns (bool status) {
+        status = raids[_raidId].active;
+    }
+
     // ============================================================
     // ONLY_CLERIC FUNCTIONS
     // ============================================================
@@ -150,7 +171,7 @@ contract RaidSpinup is HatsOwned {
         // ensure that the roles contain a cleric
         if (Roles.Cleric.isIn(_roles)) revert MissingCleric();
         // ensure that the _raiders array contains a valid cleric
-        _checkValidCleric(_raiders[0]);
+        _checkValidCleric(_raiders[0]); // _raiders[0] is the cleric, ie `uint256(Roles.Cleric) - 1`
 
         // 1. Create Raid hat, admin'd by the Raid Manager hat
         string memory raidHatDetails = _generateRaidHatDetails(HATS.getNextId(raidManagerHat));
@@ -177,16 +198,19 @@ contract RaidSpinup is HatsOwned {
         });
 
         // 2B Create the cleric hat and mint it to the cleric
-        uint256 clericHat = HATS.createHat({
-            _admin: raidManagerHat,
-            _details: _generateRoleHatDetails(Roles.Cleric, raidHatDetails),
-            _maxSupply: 1, // TODO is this the right max number if clerics?
-            _eligibility: DAO,
-            _toggle: DAO,
-            _mutable: true,
-            _imageURI: roleImageUris[Roles.Cleric]
-        });
-        HATS.mintHat(clericHat, _raiders[0]); // _raiders[0] is the cleric, ie `uint256(Roles.Cleric) - 1`
+        // uint256 clericHat = ;
+        HATS.mintHat(
+            HATS.createHat({
+                _admin: raidManagerHat,
+                _details: _generateRoleHatDetails(Roles.Cleric, raidHatDetails),
+                _maxSupply: 1, // TODO is this the right max number if clerics?
+                _eligibility: DAO,
+                _toggle: DAO,
+                _mutable: true,
+                _imageURI: roleImageUris[Roles.Cleric]
+            }),
+            _raiders[0] // _raiders[0] is the cleric, ie `uint256(Roles.Cleric) - 1`
+        );
 
         /* 3. Create non-client and non-cleric raid role hats and mint as appropriate to the `_raiders`
         For empty roles, create a mutable hat with all properties set to default values. This way, the same role will have the same child hat id across all raids. 
@@ -195,7 +219,7 @@ contract RaidSpinup is HatsOwned {
         signerHats = _createRaidRoles(raidId, raidHatDetails, _roles, _raiders);
 
         // 4. Deploy MultiHatsSignerGate and Safe, with Raid Manager Hat as owner and raid role hats (from 2 and 3) as signer hats
-        (address safe, /* address mhsg*/ ) = HSG_FACTORY.deployMultiHatsSignerGateAndSafe({
+        (address safe, address mhsg) = HSG_FACTORY.deployMultiHatsSignerGateAndSafe({
             _ownerHatId: raidManagerHat,
             _signersHatIds: signerHats,
             _minThreshold: 2, // TODO figure out correct starting values for these
@@ -213,15 +237,10 @@ contract RaidSpinup is HatsOwned {
         );
 
         // initialize raid and store it as active
-        RaidData memory raid;
-        raid.active = true;
-        raid.roles = _roles;
-        raids[raidId] = raid;
-        raid.wrappedInvoice = wrappedInvoice;
-        raid.raidPartyAvatar = safe;
+        raids[raidId] = _newRaidData(_roles, wrappedInvoice, safe, mhsg);
 
         // emit RaidCreated event
-        emit RaidCreated(raidId, safe, wrappedInvoice);
+        emit RaidCreated(raidId, safe, mhsg, wrappedInvoice);
     }
 
     // ============================================================
@@ -310,6 +329,12 @@ contract RaidSpinup is HatsOwned {
     function setRoleImageUri(Roles _role, string calldata _imageUri) public onlyOwner validRole(_role) {
         roleImageUris[_role] = _imageUri;
         emit RoleImageUriSet(_role, _imageUri);
+    }
+
+    function setMinThresholdOnRaidSafe(uint256 _raidId, uint256 _minThreshold) public onlyOwner { }
+
+    function setMaxThresholdOnRaidSafe(uint256 _raidId, uint256 _maxThreshold) public onlyOwner {
+        // TODO
     }
 
     // ============================================================
@@ -412,6 +437,18 @@ contract RaidSpinup is HatsOwned {
             _terminationTime: _invoiceTerminationTime,
             _details: _invoiceDetails
         });
+    }
+
+    function _newRaidData(uint16 _roles, address _wrappedInvoice, address _safe, address _signerGate)
+        internal
+        pure
+        returns (RaidData memory raid)
+    {
+        raid.active = true;
+        raid.roles = _roles;
+        raid.wrappedInvoice = _wrappedInvoice;
+        raid.avatar = _safe;
+        raid.signerGate = _signerGate;
     }
 
     // ============================================================

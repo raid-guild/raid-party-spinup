@@ -22,10 +22,10 @@ enum Roles {
 
 struct RaidData {
     uint16 roles; // bitmap of roles
-    address raidPartyAvatar; // ie a Safe
-    // address signerGate // can retrieve from Safe storage
-    address wrappedInvoice; // can retrieve invoice address from wrappedInvoice
     bool active;
+    address avatar; // ie a Safe
+    address signerGate;
+    address wrappedInvoice; // can retrieve invoice address from wrappedInvoice
 }
 
 error InvalidArrayLength();
