@@ -206,8 +206,8 @@ contract RaidSpinup is HatsOwned {
                 _admin: raidManagerHat,
                 _details: _generateRoleHatDetails(Roles.Cleric, raidHatDetails),
                 _maxSupply: 1, // TODO is this the right max number if clerics?
-                _eligibility: DAO,
-                _toggle: DAO,
+                _eligibility: COMMITMENT,
+                _toggle: COMMITMENT,
                 _mutable: true,
                 _imageURI: roleImageUris[Roles.Cleric]
             }),
