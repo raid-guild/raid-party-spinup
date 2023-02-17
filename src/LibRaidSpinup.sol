@@ -2,22 +2,22 @@
 pragma solidity ^0.8.16;
 
 enum Roles {
-    Client, // 0
-    Cleric, // 1
-    Monk, // 2
-    Warrior, // 3
-    Wizard, // 4
-    Archer, // 5
-    Scribe, // 6
-    Hunter, // 7
-    Ranger, // 8
-    Bard, // 9
-    Paladin, // 10
-    Alchemist, // 11
-    Necromancer, // 12
-    Druid, // 13
-    AngryDwarf, // 14
-    Rogue // 15
+    Client, // 0 with mask 0x0001, 0b0000000000000001
+    Cleric, // 1 with mask 0x0002, 0b0000000000000010
+    Monk, // 2 with mask 0x0004, 0b0000000000000100
+    Warrior, // 3 with mask 0x0008, 0b0000000000001000
+    Wizard, // 4 with mask 0x0010, 0b0000000000010000
+    Archer, // 5 with mask 0x0020, 0b0000000000100000
+    Scribe, // 6 with mask 0x0040, 0b0000000001000000
+    Hunter, // 7 with mask 0x0080, 0b0000000010000000
+    Ranger, // 8 with mask 0x0100, 0b0000000100000000
+    Bard, // 9 with mask 0x0200, 0b0000001000000000
+    Paladin, // 10 with mask 0x0400, 0b0000010000000000
+    Alchemist, // 11 with mask 0x0800, 0b0000100000000000
+    Necromancer, // 12 with mask 0x1000, 0b0001000000000000
+    Druid, // 13 with mask 0x2000, 0b0010000000000000
+    AngryDwarf, // 14 with mask 0x4000, 0b0100000000000000
+    Rogue // 15 with mask 0x8000, 0b1000000000000000
 }
 
 struct RaidData {
@@ -44,7 +44,7 @@ library LibRaidRoles {
         hasRole = _roles & mask(_role) != 0;
     }
 
-    function addTo(Roles _role, uint256 _roles) internal pure returns (uint256 _newRoles) {
+    function addTo(Roles _role, uint16 _roles) internal pure returns (uint16 _newRoles) {
         _newRoles = _roles | mask(_role);
     }
 

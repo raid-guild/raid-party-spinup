@@ -1,0 +1,5 @@
+AddToTest:test_gas_addTo() (gas: 318)
+AddToTest:test_gas_addTo_existing() (gas: 330)
+IsInTest:test_gas_IsIn() (gas: 313)
+KeyTest:test_gas_key() (gas: 879)
+MaskTest:test_gas_mask() (gas: 255)
