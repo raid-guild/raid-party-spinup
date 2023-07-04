@@ -14,3 +14,10 @@
 [submodule "lib/smart-escrow"]
 	path = lib/smart-escrow
 	url = https://github.com/raid-guild/smart-escrow
+	branch = develop
+[submodule "lib/hats-protocol"]
+	path = lib/hats-protocol
+	url = https://github.com/hats-protocol/hats-protocol
+[submodule "lib/smart-invoice"]
+	path = lib/smart-invoice
+	url = https://github.com/raid-guild/smart-invoice
