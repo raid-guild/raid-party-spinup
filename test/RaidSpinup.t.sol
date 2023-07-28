@@ -3,9 +3,9 @@ pragma solidity ^0.8.16;
 
 import { Test, console2 } from "forge-std/Test.sol";
 import {
-  RSTestSetup, RSTestSetupWithDeploy, RSTestSetupWithFork, MultiHatsSignerGate, WrappedInvoice
+  RSTestSetup, RSTestSetupWithDeploy, RSTestSetupWithFork, MultiHatsSignerGate, SmartInvoiceSplitEscrow
 } from "./RSTest.t.sol";
-import { IGnosisSafe } from "hats-zodiac/interfaces/IGnosisSafe.sol";
+import { IGnosisSafe } from "hats-zodiac/Interfaces/IGnosisSafe.sol";
 import { RaidSpinup } from "../src/RaidSpinup.sol";
 import {
   LibRaidRoles as Lib,
@@ -27,7 +27,7 @@ contract DeployTest is RSTestSetup {
             DAO,
             address(_hats),
             address(_hsgFactory),
-            address(_wiFactory),
+            address(_siFactory),
             COMMITMENT,
             ARBITRATOR,
             topHat,
@@ -38,7 +38,7 @@ contract DeployTest is RSTestSetup {
         );
     assertEq(rs.dao(), DAO);
     assertEq(address(rs.hsgFactory()), address(_hsgFactory));
-    assertEq(address(rs.wiFactory()), address(_wiFactory));
+    assertEq(address(rs.siFactory()), address(_siFactory));
     assertEq(rs.invoiceArbitrator(), ARBITRATOR);
     assertEq(rs.commitmentContract(), COMMITMENT);
     assertEq(rs.raidImageUri(), RAID_IMAGE);
@@ -96,7 +96,6 @@ contract CreateRaidTest is RSTestSetupWithDeploy {
     ];
   }
 
-  // FIXME currently blocked by the new `_requiresVerification` param in wrapped invoice factory
   function test_createRaid_clericOnly() public {
     roles = 0x2;
     raiders[0] = cleric;
@@ -106,7 +105,7 @@ contract CreateRaidTest is RSTestSetupWithDeploy {
       rs.createRaid(roles, raiders, client, WXDAI, invoiceAmounts, invoiceTerminationTime, invoiceDetails);
 
     // Raid assertions ----------------
-    (uint16 retroles, bool retactive, address retsignerGate, address retwrappedInvoice) = rs.raids(raidId);
+    (uint16 retroles, bool retactive, address retsignerGate, address retsmartInvoice) = rs.raids(raidId);
     assertEq(retroles, roles);
     assertTrue(retactive);
 
@@ -132,14 +131,11 @@ contract CreateRaidTest is RSTestSetupWithDeploy {
     (details,,,,,,,,) = _hats.viewHat(clericRaidHat);
     assertEq(details, string.concat("Raid ", vm.toString(raidId), " Cleric"));
 
-    // WrappedInvoice assertions ----------------
-    WrappedInvoice wi = WrappedInvoice(retwrappedInvoice);
-    assertEq(wi.token(), WXDAI);
-    assertEq(wi.parent(), DAO);
-    assertEq(wi.child(), safe);
+    // SmartInvoiceSplitEscrow assertions ----------------
+    SmartInvoiceSplitEscrow si = SmartInvoiceSplitEscrow(payable(retsmartInvoice));
+    smartInvoiceAssertions(si, safe);
   }
 
-  // FIXME
   function test_createRaid_allRoles_allRaiders() public {
     roles = 0xFFFF; // 0b1111111111111111
     raiders[0] = cleric;
@@ -163,7 +159,7 @@ contract CreateRaidTest is RSTestSetupWithDeploy {
       rs.createRaid(roles, raiders, client, WXDAI, invoiceAmounts, invoiceTerminationTime, invoiceDetails);
 
     // Raid assertions ----------------
-    (uint16 retroles, bool retactive, address retsignerGate, address retwrappedInvoice) = rs.raids(raidId);
+    (uint16 retroles, bool retactive, address retsignerGate, address retsmartInvoice) = rs.raids(raidId);
     assertEq(retroles, roles);
     assertTrue(retactive);
 
@@ -189,12 +185,25 @@ contract CreateRaidTest is RSTestSetupWithDeploy {
     (details,,,,,,,,) = _hats.viewHat(clericRaidHat);
     assertEq(details, string.concat("Raid ", vm.toString(raidId), " Cleric"));
 
-    // WrappedInvoice assertions ----------------
-    WrappedInvoice wi = WrappedInvoice(retwrappedInvoice);
-    assertEq(wi.token(), WXDAI);
-    assertEq(wi.parent(), DAO);
-    assertEq(wi.child(), safe);
+    // SmartInvoiceSplitEscrow assertions ----------------
+    SmartInvoiceSplitEscrow si = SmartInvoiceSplitEscrow(payable(retsmartInvoice));
+    smartInvoiceAssertions(si, safe);
   }
+
+  function smartInvoiceAssertions(SmartInvoiceSplitEscrow _si, address _safe) internal {
+    assertEq(_si.provider(), _safe);
+    assertEq(_si.client(), client);
+    assertEq(uint(_si.resolverType()), 1); // TODO change if not hardcoded in RaidSpinup.sol
+    assertEq(_si.resolver(), rs.invoiceArbitrator());
+    assertEq(_si.token(), WXDAI);
+    assertEq(_si.terminationTime(), invoiceTerminationTime);
+    assertEq(_si.resolutionRate(), 20); // 20 = default value TODO test further
+    assertEq(_si.details(), invoiceDetails);
+    assertEq(_si.wrappedNativeToken(), _siFactory.wrappedNativeToken());
+    assertEq(_si.dao(), DAO);
+    assertEq(_si.daoFee(), 1000); // TODO change if not hardcoded in RaidSpinup.sol
+    assertEq(_si.wrappedNativeToken(), _siFactory.wrappedNativeToken());
+  } 
 }
 
 contract InternalNonRaidFunctionsTest is RaidSpinup, RSTestSetup {
@@ -242,7 +251,7 @@ contract InternalNonRaidFunctionsTest is RaidSpinup, RSTestSetup {
   function test_internal_newRaidData() public {
     RaidData memory rd = _newRaidData(2, address(0x3), address(0x4));
     assertEq(rd.roles, 2);
-    assertEq(rd.wrappedInvoice, address(0x3));
+    assertEq(rd.smartInvoiceSplitEscrow, address(0x3));
     assertEq(rd.signerGate, address(0x4));
     assertTrue(rd.active);
   }
@@ -388,14 +397,14 @@ contract OwnerSettersTest is RSTestSetupWithDeploy {
     assertEq(address(rs.hsgFactory()), newHsgFactory);
   }
 
-  function test_setWrappedInvoiceFactory() public {
-    address newWiFactory = makeAddr("newWiFactory");
+  function test_setSmartInvoiceFactory() public {
+    address newSiFactory = makeAddr("newSiFactory");
     mockIsWearerCall(DAO, topHat, true);
     vm.expectEmit(false, false, false, true);
-    emit RSEvents.WrappedInvoiceFactorySet(newWiFactory);
+    emit RSEvents.SmartInvoiceFactorySet(newSiFactory);
     vm.prank(DAO);
-    rs.setWrappedInvoiceFactory(newWiFactory);
-    assertEq(address(rs.wiFactory()), newWiFactory);
+    rs.setSmartInvoiceFactory(newSiFactory);
+    assertEq(address(rs.siFactory()), newSiFactory);
   }
 
   function test_setInvoiceArbitratory() public {

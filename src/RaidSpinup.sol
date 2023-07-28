@@ -4,8 +4,8 @@ pragma solidity ^0.8.16;
 import { HatsOwned } from "hats-auth/HatsOwned.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
 import { MultiHatsSignerGate } from "hats-zodiac/MultiHatsSignerGate.sol";
-// import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
-// import { WrappedInvoice } from "smart-escrow/WrappedInvoice.sol";
+import { SmartInvoiceSplitEscrow } from "smart-invoice/SmartInvoiceSplitEscrow.sol";
+import { SmartInvoiceFactory } from "smart-invoice/SmartInvoiceFactory.sol"; 
 import { LibString } from "solady/utils/LibString.sol";
 import {
   LibRaidRoles,
@@ -31,7 +31,7 @@ contract RaidSpinup is HatsOwned {
   address public immutable dao;
 
   HatsSignerGateFactory public hsgFactory;
-  IWrappedInvoiceFactory public wiFactory;
+  SmartInvoiceFactory public siFactory;
   address public invoiceArbitrator;
   address public commitmentContract;
   string public raidImageUri;
@@ -65,7 +65,7 @@ contract RaidSpinup is HatsOwned {
     address _dao,
     address _hats,
     address _hsgFactory,
-    address _wrappedInvoiceFactory,
+    address _smartInvoiceFactory,
     address _commitmentStaking,
     address _invoiceArbitrator,
     uint256 _ownerHat,
@@ -78,7 +78,7 @@ contract RaidSpinup is HatsOwned {
 
     dao = _dao;
     hsgFactory = HatsSignerGateFactory(_hsgFactory);
-    wiFactory = IWrappedInvoiceFactory(_wrappedInvoiceFactory);
+    siFactory = SmartInvoiceFactory(_smartInvoiceFactory);
     commitmentContract = _commitmentStaking;
     invoiceArbitrator = _invoiceArbitrator;
     raidManagerHat = _raidManagerHat;
@@ -111,12 +111,8 @@ contract RaidSpinup is HatsOwned {
     signerGate = raids[_raidId].signerGate;
   }
 
-  function getRaidWrappedInvoice(uint256 _raidId) public view returns (address wrappedInvoice) {
-    wrappedInvoice = raids[_raidId].wrappedInvoice;
-  }
-
   function getRaidSmartInvoice(uint256 _raidId) public view returns (address invoice) {
-    invoice = address(WrappedInvoice(getRaidWrappedInvoice(_raidId)).invoice());
+    invoice = raids[_raidId].smartInvoiceSplitEscrow;
   }
 
   function getRaidStatus(uint256 _raidId) public view returns (bool status) {
@@ -132,7 +128,7 @@ contract RaidSpinup is HatsOwned {
    *     - A Hat worn by and representing the raid party
    *     - Hats for all possible raid roles
    *     - A Safe multisig for the raid party, with signers gated by the role Hats
-   *     - A Wrapped Invoice for the raid
+   *     - A Smart Invoice Split Escrow for the raid that splits payments between DAO and Safe multisig
    *     - A hat for the raid's client (not yet minted)
    *
    * Supports assignment of up to one raider per role. If there are multiple raiders per role, the raid party can mint
@@ -225,8 +221,7 @@ contract RaidSpinup is HatsOwned {
       _signersHatIds: signerHats,
       _minThreshold: MIN_THRESHOLD,
       _targetThreshold: TARGET_THRESHOLD,
-      _maxSigners: MAX_SIGNERS,
-      _saltNonce: raidId // for funsies
+      _maxSigners: MAX_SIGNERS
      });
 
     console2.log("mhsg", mhsg);
@@ -239,16 +234,15 @@ contract RaidSpinup is HatsOwned {
 
     console2.log("minted raid hat to safe");
 
-    // 6. Deploy Wrapped Invoice, with Safe as provider (and RG DAO as spoils recipient?)
-    // TODO update this for the new version of Smart Invoice
-    address wrappedInvoice =
-      _deployWrappedInvoice(_client, safe, _invoiceToken, _invoiceAmounts, _invoiceTerminationTime, _invoiceDetails);
+    // 6. Deploy Smart Invoice, with Safe as provider
+    address smartInvoice =
+      _deploySmartInvoice(_client, safe, _invoiceToken, _invoiceAmounts, _invoiceTerminationTime, _invoiceDetails);
 
     // initialize raid and store it as active
-    raids[raidId] = _newRaidData(_roles, wrappedInvoice, mhsg);
+    raids[raidId] = _newRaidData(_roles, smartInvoice, mhsg);
 
     // emit RaidCreated event
-    emit RSEvents.RaidCreated(raidId, safe, mhsg, wrappedInvoice);
+    emit RSEvents.RaidCreated(raidId, safe, mhsg, smartInvoice);
   }
 
   // ============================================================
@@ -310,9 +304,9 @@ contract RaidSpinup is HatsOwned {
     emit RSEvents.HatsSignerGateFactorySet(_hsgFactory);
   }
 
-  function setWrappedInvoiceFactory(address _wiFactory) public onlyOwner {
-    wiFactory = IWrappedInvoiceFactory(_wiFactory);
-    emit RSEvents.WrappedInvoiceFactorySet(_wiFactory);
+  function setSmartInvoiceFactory(address _siFactory) public onlyOwner {
+    siFactory = SmartInvoiceFactory(_siFactory);
+    emit RSEvents.SmartInvoiceFactorySet(_siFactory);
   }
 
   function setInvoiceArbitrator(address _invoiceArbitrator) public onlyOwner {
@@ -435,39 +429,40 @@ contract RaidSpinup is HatsOwned {
     }
   }
 
-  function _deployWrappedInvoice(
+  function _deploySmartInvoice(
     address _client,
     address _safe,
     address _invoiceToken,
-    uint256[] calldata _invoiceAmounts,
+    uint256[] calldata _amounts,
     uint256 _invoiceTerminationTime,
     bytes32 _invoiceDetails
-  ) internal returns (address wrappedInvoice) {
-    address[] memory providers = new address[](2);
-    providers[0] = dao;
-    providers[1] = _safe;
+  ) internal returns (address smartInvoice) {
 
-    wrappedInvoice = wiFactory.create({
-      _client: _client,
-      _providers: providers,
-      _splitFactor: 10, // 10% to DAO and 90% to raid party
-      _resolverType: 1, // ARBITRATOR
-      _resolver: invoiceArbitrator,
-      _token: _invoiceToken,
-      _amounts: _invoiceAmounts,
-      _terminationTime: _invoiceTerminationTime,
-      _details: _invoiceDetails
-    });
+    bytes memory _data = abi.encode(
+      _client, // _client
+      1, // _resolverType (1 = ARBITRATOR)
+      invoiceArbitrator, //_resolver
+      _invoiceToken, // _token
+      _invoiceTerminationTime, // _terminationTime
+      _invoiceDetails, // _details
+      siFactory.wrappedNativeToken(), //_wrappedNativeToken
+      false, //_requireVerification TODO how should this be set?
+      address(siFactory), //_factory
+      dao, // _dao
+      1000 // _daoFee (10% in basis points) 
+    );
+
+    smartInvoice = siFactory.create( _safe, _amounts, _data, "split-escrow");
   }
 
-  function _newRaidData(uint16 _roles, address _wrappedInvoice, address _signerGate)
+  function _newRaidData(uint16 _roles, address _smartInvoiceSplitEscrow, address _signerGate)
     internal
     pure
     returns (RaidData memory raid)
   {
     raid.active = true;
     raid.roles = _roles;
-    raid.wrappedInvoice = _wrappedInvoice;
+    raid.smartInvoiceSplitEscrow = _smartInvoiceSplitEscrow;
     raid.signerGate = _signerGate;
   }
 

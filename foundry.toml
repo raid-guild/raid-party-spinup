@@ -15,7 +15,9 @@ remappings = [
   "smart-invoice/=lib/smart-invoice/packages/contracts/contracts/",
   "smart-escrow/=lib/smart-escrow/packages/contracts/contracts/",
   "solady/=lib/solady/src/",
-  "solbase/=lib/solbase/src/",
+  "solbase/=lib/hats-protocol/lib/solbase/src/",
+  "smart-invoice/=lib/smart-invoice/src",
+  "@openzeppelin/contracts/=lib/hats-zodiac/lib/openzeppelin-contracts/contracts"
 ]
 
 [fmt]
