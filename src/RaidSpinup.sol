@@ -4,8 +4,8 @@ pragma solidity ^0.8.16;
 import { HatsOwned } from "hats-auth/HatsOwned.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
 import { MultiHatsSignerGate } from "hats-zodiac/MultiHatsSignerGate.sol";
-import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
-import { WrappedInvoice } from "smart-escrow/WrappedInvoice.sol";
+// import { IWrappedInvoiceFactory } from "smart-escrow/interfaces/IWrappedInvoiceFactory.sol";
+// import { WrappedInvoice } from "smart-escrow/WrappedInvoice.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import {
   LibRaidRoles,
