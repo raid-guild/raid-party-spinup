@@ -24,7 +24,14 @@ struct RaidData {
   uint16 roles; // bitmap of roles
   bool active;
   address signerGate; // can retrieve the Safe from here
-  address smartInvoiceSplitEscrow; // can retrieve invoice address from wrappedInvoice
+  address smartInvoiceSplitEscrow;
+}
+
+struct InvoiceArgs {
+  address token;
+  uint256[] amounts;
+  uint256 terminationTime;
+  bytes32 details;
 }
 
 error InvalidArrayLength();

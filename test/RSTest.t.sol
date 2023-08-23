@@ -3,16 +3,13 @@ pragma solidity ^0.8.16;
 
 import { Test, console2 } from "forge-std/Test.sol";
 import { RaidSpinup } from "../src/RaidSpinup.sol";
-import { Roles } from "../src/LibRaidSpinup.sol";
+import { Roles, InvoiceArgs } from "../src/LibRaidSpinup.sol";
 import { Hats } from "hats-protocol/Hats.sol";
 // import { IHats } from "hats-protocol/Interfaces/IHats.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
 import { HatsSignerGate } from "hats-zodiac/HatsSignerGate.sol";
 import { MultiHatsSignerGate } from "hats-zodiac/MultiHatsSignerGate.sol";
-// import { SmartInvoiceFactory } from "smart-invoice/SmartInvoiceFactory.sol";
-// import { SmartInvoice } from "smart-invoice/SmartInvoice.sol";
-// import { WrappedInvoiceFactory } from "smart-escrow/WrappedInvoiceFactory.sol";
-// import { WrappedInvoice } from "smart-escrow/WrappedInvoice.sol";
+
 import { SmartInvoiceSplitEscrow } from "smart-invoice/SmartInvoiceSplitEscrow.sol";
 import { SmartInvoiceFactory } from "smart-invoice/SmartInvoiceFactory.sol"; 
 
@@ -61,6 +58,7 @@ contract RSTestSetup is Test {
     ROGUE
   ];
 
+  string internal constant RAID_HAT_DETAILS = "{'name': 'test raid', 'description': 'for testing'}";
   string internal constant RAID_IMAGE = "https://raid-image.com";
   bytes32 internal constant INVOICE_TYPE = "split-escrow";
   uint256 internal constant _MIN_THRESHOLD = 2;
@@ -115,9 +113,8 @@ contract RSTestSetup is Test {
 
   uint16 internal roles;
   address[] internal raiders;
-  uint256[] internal invoiceAmounts;
-  uint256 internal invoiceTerminationTime;
-  bytes32 internal invoiceDetails;
+
+  InvoiceArgs internal invoiceArgs;
 
   function setUp() public virtual {
     DAO = makeAddr("dao");
@@ -145,8 +142,11 @@ contract RSTestSetup is Test {
     // _wiFactory = WrappedInvoiceFactory(WI_FACTORY);
     // _hsgFactory = HatsSignerGateFactory(HSG_FACTORY);
     _hats = deployHats();
+    console2.log("deployedHats");
     _siFactory = deploySIFactoryAndDeps();
+    console2.log("deployedSIFactory");
     _hsgFactory = deployHSGFactoryAndDeps();
+    console2.log("deployedHSGF");
 
     gnosisFork = vm.createFork(vm.envString("GC_RPC"), 26_545_541);
   }
