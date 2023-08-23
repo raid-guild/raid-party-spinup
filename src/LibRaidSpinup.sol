@@ -24,7 +24,14 @@ struct RaidData {
   uint16 roles; // bitmap of roles
   bool active;
   address signerGate; // can retrieve the Safe from here
-  address wrappedInvoice; // can retrieve invoice address from wrappedInvoice
+  address smartInvoiceSplitEscrow;
+}
+
+struct InvoiceArgs {
+  address token;
+  uint256[] amounts;
+  uint256 terminationTime;
+  bytes32 details;
 }
 
 error InvalidArrayLength();
@@ -74,7 +81,7 @@ library RSEvents {
 
   event RaidCreated(uint256 raidId, address avatar, address signerGate, address wrappedInvoice);
   event HatsSignerGateFactorySet(address factory);
-  event WrappedInvoiceFactorySet(address factory);
+  event SmartInvoiceFactorySet(address factory);
   event InvoiceArbitratorSet(address arbitrator);
   event CommitmentContractSet(address commitment);
   event RaidManagerHatSet(uint256 hatId);

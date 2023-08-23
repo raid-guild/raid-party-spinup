@@ -3,16 +3,16 @@ pragma solidity ^0.8.16;
 
 import { Test, console2 } from "forge-std/Test.sol";
 import { RaidSpinup } from "../src/RaidSpinup.sol";
-import { Roles } from "../src/LibRaidSpinup.sol";
+import { Roles, InvoiceArgs } from "../src/LibRaidSpinup.sol";
 import { Hats } from "hats-protocol/Hats.sol";
 // import { IHats } from "hats-protocol/Interfaces/IHats.sol";
 import { HatsSignerGateFactory } from "hats-zodiac/HatsSignerGateFactory.sol";
 import { HatsSignerGate } from "hats-zodiac/HatsSignerGate.sol";
 import { MultiHatsSignerGate } from "hats-zodiac/MultiHatsSignerGate.sol";
-import { SmartInvoiceFactory } from "smart-invoice/SmartInvoiceFactory.sol";
-import { SmartInvoice } from "smart-invoice/SmartInvoice.sol";
-import { WrappedInvoiceFactory } from "smart-escrow/WrappedInvoiceFactory.sol";
-import { WrappedInvoice } from "smart-escrow/WrappedInvoice.sol";
+
+import { SmartInvoiceSplitEscrow } from "smart-invoice/SmartInvoiceSplitEscrow.sol";
+import { SmartInvoiceFactory } from "smart-invoice/SmartInvoiceFactory.sol"; 
+
 import "../lib/hats-zodiac/test/HSGFactoryTestSetup.t.sol";
 
 contract RSTestSetup is Test {
@@ -58,10 +58,13 @@ contract RSTestSetup is Test {
     ROGUE
   ];
 
+  string internal constant RAID_HAT_DETAILS = "{'name': 'test raid', 'description': 'for testing'}";
   string internal constant RAID_IMAGE = "https://raid-image.com";
+  bytes32 internal constant INVOICE_TYPE = "split-escrow";
   uint256 internal constant _MIN_THRESHOLD = 2;
   uint256 internal constant _TARGET_THRESHOLD = 4;
   uint256 internal constant _MAX_SIGNERS = 9;
+  
 
   // Gnosis Chain deployments for fork testing
 
@@ -77,7 +80,7 @@ contract RSTestSetup is Test {
   RaidSpinup internal rs;
   Hats internal _hats;
   HatsSignerGateFactory internal _hsgFactory;
-  WrappedInvoiceFactory internal _wiFactory;
+  SmartInvoiceFactory internal _siFactory;
 
   address internal DAO;
   address internal COMMITMENT;
@@ -110,9 +113,8 @@ contract RSTestSetup is Test {
 
   uint16 internal roles;
   address[] internal raiders;
-  uint256[] internal invoiceAmounts;
-  uint256 internal invoiceTerminationTime;
-  bytes32 internal invoiceDetails;
+
+  InvoiceArgs internal invoiceArgs;
 
   function setUp() public virtual {
     DAO = makeAddr("dao");
@@ -140,8 +142,11 @@ contract RSTestSetup is Test {
     // _wiFactory = WrappedInvoiceFactory(WI_FACTORY);
     // _hsgFactory = HatsSignerGateFactory(HSG_FACTORY);
     _hats = deployHats();
-    _wiFactory = deployWIFactoryAndDeps();
+    console2.log("deployedHats");
+    _siFactory = deploySIFactoryAndDeps();
+    console2.log("deployedSIFactory");
     _hsgFactory = deployHSGFactoryAndDeps();
+    console2.log("deployedHSGF");
 
     gnosisFork = vm.createFork(vm.envString("GC_RPC"), 26_545_541);
   }
@@ -150,11 +155,11 @@ contract RSTestSetup is Test {
     hats = new Hats("Test Hats Protocol", "xyz.hatsprotocol.image");
   }
 
-  function deployWIFactoryAndDeps() public returns (WrappedInvoiceFactory wiFactory) {
-    address si = address(new SmartInvoice());
-    address siFactory = address(new SmartInvoiceFactory(si, WXDAI));
-    address wi = address(new WrappedInvoice());
-    wiFactory = new WrappedInvoiceFactory(wi, siFactory);
+  function deploySIFactoryAndDeps() public returns (SmartInvoiceFactory siFactory) {
+    address si = address(new SmartInvoiceSplitEscrow());
+    siFactory = new SmartInvoiceFactory(WXDAI);
+
+    siFactory.addImplementation(INVOICE_TYPE, si);
   }
 
   function deployHSGFactoryAndDeps() public returns (HatsSignerGateFactory hsgFactory) {
@@ -198,7 +203,7 @@ contract RSTestSetupWithDeploy is RSTestSetup {
             DAO,
             address(_hats),
             address(_hsgFactory),
-            address(_wiFactory),
+            address(_siFactory),
             COMMITMENT,
             ARBITRATOR,
             topHat,
@@ -228,7 +233,7 @@ contract RSTestSetupWithFork is RSTestSetup {
             DAO,
             address(_hats),
             address(_hsgFactory),
-            address(_wiFactory),
+            address(_siFactory),
             COMMITMENT,
             ARBITRATOR,
             topHat,

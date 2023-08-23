@@ -10,7 +10,7 @@ library RSEvents {
 
   event RaidCreated(uint256 raidId, address avatar, address signerGate, address wrappedInvoice);
   event HatsSignerGateFactorySet(address factory);
-  event WrappedInvoiceFactorySet(address factory);
+  event SmartInvoiceFactorySet(address factory);
   event InvoiceArbitratorSet(address arbitrator);
   event CommitmentContractSet(address commitment);
   event RaidManagerHatSet(uint256 hatId);
